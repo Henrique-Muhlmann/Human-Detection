@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🦾 Human Detection — Proteção de Célula Robotizada
+# Human Detection — Proteção de Célula Robotizada
 
 ### Sistema de Visão Computacional para detecção de partes humanas em tempo real
 
