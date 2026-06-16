@@ -4,12 +4,6 @@
  SISTEMA DE DETECCAO DE PARTES HUMANAS EM CELULA ROBOTIZADA  (Versao 1)
 ===============================================================================
 
-Objetivo
---------
-Camera RGB top-down sobre uma mesa de trabalho. Detectar IMEDIATAMENTE qualquer
-parte do corpo humano que entre no campo de visao (braco, antebraco, mao, dedos)
-e disparar um alerta visual, com baixa latencia, EM TEMPO REAL (janela ao vivo).
-
 Arquitetura: DEFESA EM PROFUNDIDADE (3 camadas redundantes)
 -----------------------------------------------------------
   Camada 1  - MediaPipe Hands (Tasks API) : maos e dedos (21 landmarks).
@@ -48,7 +42,7 @@ Execucao
     python human_safety_detector.py
     (tecla 'q' = sair | 'd' = liga/desliga visualizacao da mascara de pele)
 
-Autor: Engenharia de Visao Computacional
+Autor: Henrique Amaral Muhlmann
 ===============================================================================
 """
 
@@ -66,10 +60,10 @@ from mediapipe.tasks.python import vision
 # =============================================================================
 class Config:
     # --- Camera ---
-    CAMERA_INDEX = 0          # 0 = webcam padrao; troque para a sua camera USB
+    CAMERA_INDEX = 0  # 0 = webcam padrao; troque para a sua camera USB
     FRAME_WIDTH = 1280
     FRAME_HEIGHT = 720
-    FLIP_HORIZONTAL = True     # espelha como um "espelho" (mais natural no teste)
+    FLIP_HORIZONTAL = True  # espelha como um "espelho" (mais natural no teste)
 
     # --- Caminhos dos modelos (Tasks API) ---
     HAND_MODEL = "hand_landmarker.task"
@@ -77,17 +71,17 @@ class Config:
 
     # --- MediaPipe Hands ---
     HANDS_MAX = 4
-    HANDS_DET_CONF = 0.4               # um pouco mais sensivel para seguranca
+    HANDS_DET_CONF = 0.4  # um pouco mais sensivel para seguranca
 
     # --- MediaPipe Pose ---
     POSE_DET_CONF = 0.4
 
     # --- Camada de pele + movimento (rede de seguranca) ---
     USE_SKIN_MOTION_LAYER = True
-    SKIN_MIN_AREA = 2500               # area minima (px) de blob de pele p/ alertar
+    SKIN_MIN_AREA = 2500  # area minima (px) de blob de pele p/ alertar
     MOTION_HISTORY = 200
     MOTION_VAR_THRESHOLD = 25
-    SKIN_REQUIRES_MOTION = True        # so alerta pele se houver movimento junto
+    SKIN_REQUIRES_MOTION = True  # so alerta pele se houver movimento junto
 
     # --- Estabilizacao temporal do alerta (histerese contra flicker) ---
     ALERT_ON_FRAMES = 2
@@ -102,12 +96,27 @@ class MediaPipeDetector:
 
     # Conexoes da mao (pares de indices de landmarks) para desenhar o esqueleto.
     HAND_CONNECTIONS = [
-        (0, 1), (1, 2), (2, 3), (3, 4),           # polegar
-        (0, 5), (5, 6), (6, 7), (7, 8),           # indicador
-        (5, 9), (9, 10), (10, 11), (11, 12),      # medio
-        (9, 13), (13, 14), (14, 15), (15, 16),    # anelar
-        (13, 17), (17, 18), (18, 19), (19, 20),   # mindinho
-        (0, 17),                                  # base da palma
+        (0, 1),
+        (1, 2),
+        (2, 3),
+        (3, 4),  # polegar
+        (0, 5),
+        (5, 6),
+        (6, 7),
+        (7, 8),  # indicador
+        (5, 9),
+        (9, 10),
+        (10, 11),
+        (11, 12),  # medio
+        (9, 13),
+        (13, 14),
+        (14, 15),
+        (15, 16),  # anelar
+        (13, 17),
+        (17, 18),
+        (18, 19),
+        (19, 20),  # mindinho
+        (0, 17),  # base da palma
     ]
 
     # Indices dos landmarks de Pose que representam os membros superiores.
@@ -164,7 +173,7 @@ class MediaPipeDetector:
                 pts = [(int(p.x * w), int(p.y * h)) for p in lms]
                 for a, b in self.HAND_CONNECTIONS:
                     cv2.line(frame_bgr, pts[a], pts[b], (0, 255, 0), 2)
-                for (px, py) in pts:
+                for px, py in pts:
                     cv2.circle(frame_bgr, (px, py), 4, (0, 0, 255), -1)
                 # Destaca as pontas dos dedos (4,8,12,16,20).
                 for tip in (4, 8, 12, 16, 20):
@@ -187,9 +196,14 @@ class MediaPipeDetector:
                         arm_visible = True
                         # Desenha o segmento do membro (ombro->cotovelo->punho).
                         for j in range(len(chain_pts) - 1):
-                            cv2.line(frame_bgr, chain_pts[j], chain_pts[j + 1],
-                                     (0, 255, 255), 4)
-                        for (px, py) in chain_pts:
+                            cv2.line(
+                                frame_bgr,
+                                chain_pts[j],
+                                chain_pts[j + 1],
+                                (0, 255, 255),
+                                4,
+                            )
+                        for px, py in chain_pts:
                             cv2.circle(frame_bgr, (px, py), 8, (0, 200, 255), -1)
             if arm_visible:
                 labels.append("BRACO/ANTEBRACO")
@@ -225,32 +239,42 @@ class SkinMotionDetector:
         """Mascara de pele combinando YCrCb e HSV para robustez a iluminacao."""
         ycrcb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2YCrCb)
         mask_ycrcb = cv2.inRange(
-            ycrcb, np.array([0, 133, 77], np.uint8),
-            np.array([255, 173, 127], np.uint8))
+            ycrcb, np.array([0, 133, 77], np.uint8), np.array([255, 173, 127], np.uint8)
+        )
         hsv = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2HSV)
         mask_hsv = cv2.inRange(
-            hsv, np.array([0, 30, 60], np.uint8),
-            np.array([25, 150, 255], np.uint8))
+            hsv, np.array([0, 30, 60], np.uint8), np.array([25, 150, 255], np.uint8)
+        )
         return cv2.bitwise_and(mask_ycrcb, mask_hsv)
 
     def process(self, frame_bgr, debug=False):
         """Retorna: (detectou: bool, frame_anotado, mascara_debug ou None)"""
         skin = self._skin_mask(frame_bgr)
         motion = self.bg.apply(frame_bgr)
-        combined = cv2.bitwise_and(skin, motion) if self.cfg.SKIN_REQUIRES_MOTION else skin
+        combined = (
+            cv2.bitwise_and(skin, motion) if self.cfg.SKIN_REQUIRES_MOTION else skin
+        )
         combined = cv2.morphologyEx(combined, cv2.MORPH_OPEN, self.kernel)
         combined = cv2.dilate(combined, self.kernel, iterations=2)
 
         contours, _ = cv2.findContours(
-            combined, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            combined, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+        )
         detected = False
         for c in contours:
             if cv2.contourArea(c) >= self.cfg.SKIN_MIN_AREA:
                 detected = True
                 x, y, w, h = cv2.boundingRect(c)
                 cv2.rectangle(frame_bgr, (x, y), (x + w, y + h), (0, 140, 255), 2)
-                cv2.putText(frame_bgr, "PELE+MOV", (x, max(0, y - 8)),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 140, 255), 2)
+                cv2.putText(
+                    frame_bgr,
+                    "PELE+MOV",
+                    (x, max(0, y - 8)),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.5,
+                    (0, 140, 255),
+                    2,
+                )
         return detected, frame_bgr, (combined if debug else None)
 
 
@@ -265,11 +289,13 @@ class AlertStabilizer:
 
     def update(self, raw_detection: bool) -> bool:
         if raw_detection:
-            self._pos += 1; self._neg = 0
+            self._pos += 1
+            self._neg = 0
             if self._pos >= self.on_frames:
                 self.alert = True
         else:
-            self._neg += 1; self._pos = 0
+            self._neg += 1
+            self._pos = 0
             if self._neg >= self.off_frames:
                 self.alert = False
         return self.alert
@@ -286,18 +312,41 @@ def draw_hud(frame, alert, labels, fps):
         (tw, th), _ = cv2.getTextSize(banner, cv2.FONT_HERSHEY_SIMPLEX, 1.1, 3)
         cx = (w - tw) // 2
         cv2.rectangle(frame, (cx - 20, 20), (cx + tw + 20, 80), (0, 0, 255), -1)
-        cv2.putText(frame, banner, (cx, 62),
-                    cv2.FONT_HERSHEY_SIMPLEX, 1.1, (255, 255, 255), 3)
+        cv2.putText(
+            frame, banner, (cx, 62), cv2.FONT_HERSHEY_SIMPLEX, 1.1, (255, 255, 255), 3
+        )
         det = " + ".join(sorted(set(labels))) if labels else "deteccao"
-        cv2.putText(frame, f"Origem: {det}", (cx, 110),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+        cv2.putText(
+            frame,
+            f"Origem: {det}",
+            (cx, 110),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.7,
+            (0, 0, 255),
+            2,
+        )
     else:
-        cv2.putText(frame, "AREA LIVRE", (20, 50),
-                    cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 200, 0), 2)
-    cv2.putText(frame, f"FPS: {fps:4.1f}", (20, h - 20),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-    cv2.putText(frame, "q=sair  d=debug", (w - 240, h - 20),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (200, 200, 200), 2)
+        cv2.putText(
+            frame, "AREA LIVRE", (20, 50), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 200, 0), 2
+        )
+    cv2.putText(
+        frame,
+        f"FPS: {fps:4.1f}",
+        (20, h - 20),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.7,
+        (255, 255, 255),
+        2,
+    )
+    cv2.putText(
+        frame,
+        "q=sair  d=debug",
+        (w - 240, h - 20),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.6,
+        (200, 200, 200),
+        2,
+    )
     return frame
 
 
@@ -313,7 +362,8 @@ def main():
     cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
     if not cap.isOpened():
         raise RuntimeError(
-            f"Nao foi possivel abrir a camera (indice {cfg.CAMERA_INDEX}).")
+            f"Nao foi possivel abrir a camera (indice {cfg.CAMERA_INDEX})."
+        )
 
     mp_det = MediaPipeDetector(cfg)
     skin_det = SkinMotionDetector(cfg) if cfg.USE_SKIN_MOTION_LAYER else None
@@ -361,9 +411,9 @@ def main():
                 cv2.imshow("DEBUG: mascara pele+movimento", dbg_mask)
 
             key = cv2.waitKey(1) & 0xFF
-            if key == ord('q'):
+            if key == ord("q"):
                 break
-            elif key == ord('d'):
+            elif key == ord("d"):
                 debug = not debug
                 if not debug:
                     cv2.destroyWindow("DEBUG: mascara pele+movimento")
