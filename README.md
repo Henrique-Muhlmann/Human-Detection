@@ -202,6 +202,6 @@ A v1 atual já resolve o protótipo **e coleta o dataset**. Caminho recomendado 
 
 **Desenvolvido com foco em segurança industrial e visão computacional.**
 
-*Protótipo v1 — camada auxiliar. A segurança das pessoas exige hardware certificado.*
+*Protótipo v1*
 
 </div>
